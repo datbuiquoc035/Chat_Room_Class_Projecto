@@ -1,0 +1,117 @@
+{
+  "info": {
+    "name": "NoSQL Project - Chat & RateLimiter Test",
+    "description": "Collection kiểm thử đầy đủ kịch bản đồ án: Auth, Rooms, Messages, và Rate Limiting 10 req/phút",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "req_count",
+      "value": "0",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Auth - Đăng ký tài khoản mới",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"test_user_{{$timestamp}}\",\n  \"password\": \"123456\"\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:8000/auth/register",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8000",
+          "path": ["auth", "register"]
+        }
+      }
+    },
+    {
+      "name": "2. Auth - Đăng nhập tài khoản",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"user1\",\n  \"password\": \"123456\"\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:8000/auth/login",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8000",
+          "path": ["auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "3. Rooms - Xem chi tiết phòng và thành viên",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://127.0.0.1:8000/rooms/room_1",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8000",
+          "path": ["rooms", "room_1"]
+        }
+      }
+    },
+    {
+      "name": "4. Rate Limit Spam Test (15 Requests)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "let current = parseInt(pm.collectionVariables.get('req_count') || '0') + 1;",
+              "pm.collectionVariables.set('req_count', current.toString());",
+              "",
+              "if (current <= 10) {",
+              "    pm.test('Lần gọi ' + current + ': Phản hồi thành công HTTP 200 OK', function () {",
+              "        pm.expect(pm.response.code).to.eql(200);",
+              "    });",
+              "} else {",
+              "    pm.test('Lần gọi ' + current + ': Bị chặn bởi Middleware Rate Limiter HTTP 429 Too Many Requests', function () {",
+              "        pm.expect(pm.response.code).to.eql(429);",
+              "    });",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-Forwarded-For",
+            "value": "10.99.99.1"
+          }
+        ],
+        "url": {
+          "raw": "http://127.0.0.1:8000/rooms",
+          "protocol": "http",
+          "host": ["127", "0", "0", "1"],
+          "port": "8000",
+          "path": ["rooms"]
+        }
+      }
+    }
+  ]
+}

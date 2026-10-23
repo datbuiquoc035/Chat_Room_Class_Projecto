@@ -1,0 +1,349 @@
+@page "/"
+@inject ChatApp.Frontend.Services.ChatService ChatService
+@inject NavigationManager Navigation
+
+<PageTitle>Đăng nhập - NoSQL Chat Web</PageTitle>
+
+<div class="wa-login-wrapper">
+    <div class="wa-login-topbar">
+        <div class="wa-login-topbar-content">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="wa-brand-icon">
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+            </svg>
+            <span class="wa-brand-title">NOSQL CHAT WEB</span>
+        </div>
+    </div>
+
+    <div class="wa-login-container">
+        <div class="wa-login-card">
+            <div class="wa-login-instructions">
+                <h1 class="wa-login-heading">Sử dụng NoSQL Chat trên trình duyệt</h1>
+                <ol class="wa-login-steps">
+                    <li>Nhập tên tài khoản người dùng đã khởi tạo (từ <code>user1</code> đến <code>user50</code>).</li>
+                    <li>Nhập mật khẩu tương ứng (mặc định cho tất cả tài khoản mẫu: <code>123456</code>).</li>
+                    <li>Hệ thống tự động kích hoạt bảo vệ <strong>Middleware Rate Limiter</strong> (tối đa 10 req/phút).</li>
+                </ol>
+                
+                <div class="wa-security-badge">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                    <span>Phòng chat phân tán với cơ chế Redis Pub/Sub và lưu trữ Key-Value</span>
+                </div>
+            </div>
+
+            <div class="wa-login-form-pane">
+                <div class="wa-form-header">
+                    <h2 class="wa-form-title">Đăng nhập tài khoản</h2>
+                    <p class="wa-form-subtitle">Điền thông tin để tham gia hệ thống phòng chat</p>
+                </div>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="wa-alert wa-alert-danger">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        <span>@errorMessage</span>
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(rateLimitMessage))
+                {
+                    <div class="wa-alert wa-alert-warning">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                        </svg>
+                        <div>
+                            <strong>Chặn DoS / Spam (HTTP 429):</strong> @rateLimitMessage
+                        </div>
+                    </div>
+                }
+
+                <div class="wa-input-group">
+                    <label class="wa-label">Tên tài khoản</label>
+                    <input class="wa-input" @bind="username" @bind:event="oninput" placeholder="Ví dụ: user1" />
+                </div>
+
+                <div class="wa-input-group">
+                    <label class="wa-label">Mật khẩu</label>
+                    <input type="password" class="wa-input" @bind="password" @bind:event="oninput" placeholder="Nhập mật khẩu..." />
+                </div>
+
+                <div class="wa-action-buttons">
+                    <button class="btn-wa-primary wa-btn-block" @onclick="HandleLogin">
+                        <span>Đăng nhập</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                            <polyline points="12 5 19 12 12 19"></polyline>
+                        </svg>
+                    </button>
+                    <button class="btn-wa-secondary wa-btn-block" @onclick="HandleRegister">
+                        Đăng ký tài khoản mới
+                    </button>
+                </div>
+
+                <div class="wa-meta-hint">
+                    Dữ liệu mẫu: <code>user1</code> &rarr; <code>user50</code> | Mật khẩu: <code>123456</code>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.wa-login-wrapper {
+    min-height: 100vh;
+    background-color: #EFEAE2;
+    display: flex;
+    flex-direction: column;
+}
+
+.wa-login-topbar {
+    height: 200px;
+    background-color: var(--color-wa-dark-green);
+    width: 100%;
+    display: flex;
+    align-items: flex-start;
+    padding-top: 2rem;
+}
+
+.wa-login-topbar-content {
+    max-width: 1000px;
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: #FFFFFF;
+    padding: 0 1.5rem;
+}
+
+.wa-brand-icon {
+    stroke: #FFFFFF;
+}
+
+.wa-brand-title {
+    font-size: 0.875rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+}
+
+.wa-login-container {
+    max-width: 1000px;
+    width: 100%;
+    margin: -100px auto 3rem auto;
+    padding: 0 1.5rem;
+    flex: 1;
+}
+
+.wa-login-card {
+    background: #FFFFFF;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    min-height: 480px;
+}
+
+.wa-login-instructions {
+    padding: 3rem 2.5rem;
+    border-right: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.wa-login-heading {
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: var(--color-charcoal);
+    margin-bottom: 2rem;
+    line-height: 1.3;
+}
+
+.wa-login-steps {
+    padding-left: 1.25rem;
+    color: var(--color-charcoal);
+    font-size: 0.9375rem;
+    line-height: 1.8;
+}
+
+.wa-login-steps li {
+    margin-bottom: 1rem;
+}
+
+.wa-security-badge {
+    margin-top: 2rem;
+    padding: 1rem;
+    background-color: var(--color-canvas);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--color-muted);
+}
+
+.wa-login-form-pane {
+    padding: 3rem 2.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.wa-form-header {
+    margin-bottom: 1.75rem;
+}
+
+.wa-form-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--color-charcoal);
+    margin-bottom: 0.25rem;
+}
+
+.wa-form-subtitle {
+    font-size: 0.875rem;
+    color: var(--color-muted);
+}
+
+.wa-input-group {
+    margin-bottom: 1.25rem;
+}
+
+.wa-label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-charcoal);
+    margin-bottom: 0.35rem;
+}
+
+.wa-input {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font-size: 0.9375rem;
+    color: var(--color-charcoal);
+    background: #FFFFFF;
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+
+.wa-input:focus {
+    border-color: var(--color-wa-green);
+}
+
+.wa-action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.wa-btn-block {
+    width: 100%;
+    padding: 0.75rem;
+}
+
+.wa-meta-hint {
+    margin-top: 1.5rem;
+    font-size: 0.75rem;
+    color: var(--color-muted);
+    text-align: center;
+}
+
+.wa-alert {
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    margin-bottom: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.wa-alert-danger {
+    background-color: var(--color-pale-red);
+    color: var(--color-pale-red-text);
+    border: 1px solid rgba(159, 47, 45, 0.2);
+}
+
+.wa-alert-warning {
+    background-color: var(--color-pale-yellow);
+    color: var(--color-pale-yellow-text);
+    border: 1px solid rgba(149, 100, 0, 0.2);
+}
+
+@@media (max-width: 800px) {
+    .wa-login-card {
+        grid-template-columns: 1fr;
+    }
+    .wa-login-instructions {
+        border-right: none;
+        border-bottom: 1px solid var(--color-border);
+    }
+}
+</style>
+
+@code {
+    private string username = "user1";
+    private string password = "123456";
+    private string errorMessage = "";
+    private string rateLimitMessage = "";
+
+    private async Task HandleLogin()
+    {
+        errorMessage = "";
+        rateLimitMessage = "";
+        try
+        {
+            var res = await ChatService.LoginAsync(username, password);
+            if (res != null)
+            {
+                Navigation.NavigateTo($"/lobby?userId={res.User_Id}&username={res.Username}", true);
+            }
+        }
+        catch (ChatApp.Frontend.Services.RateLimitException rx)
+        {
+            rateLimitMessage = rx.Message;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleRegister()
+    {
+        errorMessage = "";
+        rateLimitMessage = "";
+        try
+        {
+            var res = await ChatService.RegisterAsync(username, password);
+            if (res != null)
+            {
+                Navigation.NavigateTo($"/lobby?userId={res.User_Id}&username={res.Username}", true);
+            }
+        }
+        catch (ChatApp.Frontend.Services.RateLimitException rx)
+        {
+            rateLimitMessage = rx.Message;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            StateHasChanged();
+        }
+    }
+}
