@@ -891,6 +891,10 @@
     private ClientWebSocket? ws;
     private CancellationTokenSource cts = new();
 
+    // Room-directory socket: lives for the whole page/circuit, unlike the per-room socket above.
+    private ClientWebSocket? roomsWs;
+    private readonly CancellationTokenSource roomsCts = new();
+
     private string? _activeLoadedRoomId;
 
     private List<ChatApp.Frontend.Services.Room> FilteredRooms =>
@@ -907,6 +911,17 @@
             Username = "user1";
         }
         await LoadRooms();
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Start only in the interactive circuit (OnAfterRender never runs during prerendering),
+        // so a page load doesn't open a throwaway socket or spend an extra /rooms request.
+        if (firstRender)
+        {
+            _ = ConnectRoomsWebSocketAsync(roomsCts.Token);
+        }
+        return Task.CompletedTask;
     }
 
     protected override async Task OnParametersSetAsync()
@@ -1048,6 +1063,82 @@
         }
     }
 
+    private async Task ConnectRoomsWebSocketAsync(CancellationToken token)
+    {
+        while (!token.IsCancellationRequested)
+        {
+            try
+            {
+                roomsWs = new ClientWebSocket();
+                await roomsWs.ConnectAsync(new Uri("ws://127.0.0.1:8000/ws/rooms"), token);
+
+                // Catch up on rooms created before this subscription (or while disconnected).
+                await RefreshRoomsSilentlyAsync();
+
+                var buffer = new byte[1024 * 8];
+                while (roomsWs.State == WebSocketState.Open && !token.IsCancellationRequested)
+                {
+                    var result = await roomsWs.ReceiveAsync(new ArraySegment<byte>(buffer), token);
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        break;
+                    }
+
+                    var json = System.Text.Encoding.UTF8.GetString(buffer, 0, result.Count);
+                    var evt = System.Text.Json.JsonSerializer.Deserialize<ChatApp.Frontend.Services.RoomEvent>(
+                        json,
+                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                    );
+
+                    if (evt?.Type == "room_created" && evt.Room != null)
+                    {
+                        await InvokeAsync(() =>
+                        {
+                            AddRoomIfMissing(evt.Room);
+                            StateHasChanged();
+                        });
+                    }
+                }
+            }
+            catch
+            {
+                // Silent retry: the sidebar must never show connection noise.
+            }
+
+            if (token.IsCancellationRequested) break;
+            await Task.Delay(2000, token).ContinueWith(_ => { });
+        }
+    }
+
+    private async Task RefreshRoomsSilentlyAsync()
+    {
+        try
+        {
+            var latest = await ChatService.GetRoomsAsync(UserId, forceRefresh: true);
+            await InvokeAsync(() =>
+            {
+                // Merge instead of replacing: an event may have arrived while the fetch was in flight.
+                foreach (var room in latest)
+                {
+                    AddRoomIfMissing(room);
+                }
+                StateHasChanged();
+            });
+        }
+        catch
+        {
+            // Background refresh must stay silent, including HTTP 429 from the rate limiter.
+        }
+    }
+
+    private void AddRoomIfMissing(ChatApp.Frontend.Services.Room room)
+    {
+        if (rooms.Any(r => r.Id == room.Id)) return;
+        rooms.Add(room);
+        rooms.Sort((a, b) => string.CompareOrdinal(a.Id, b.Id));
+        ChatService.CacheRoom(room);
+    }
+
     private async Task SendMessage()
     {
         if (string.IsNullOrWhiteSpace(currentMessage) || string.IsNullOrEmpty(RoomId)) return;
@@ -1170,6 +1261,7 @@
     public async ValueTask DisposeAsync()
     {
         cts.Cancel();
+        roomsCts.Cancel();
         if (ws != null)
         {
             try
@@ -1179,6 +1271,18 @@
                     await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Leaving", CancellationToken.None);
                 }
                 ws.Dispose();
+            }
+            catch { }
+        }
+        if (roomsWs != null)
+        {
+            try
+            {
+                if (roomsWs.State == WebSocketState.Open)
+                {
+                    await roomsWs.CloseAsync(WebSocketCloseStatus.NormalClosure, "Leaving", CancellationToken.None);
+                }
+                roomsWs.Dispose();
             }
             catch { }
         }

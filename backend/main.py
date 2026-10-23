@@ -23,6 +23,9 @@ app.add_middleware(
 # Redis sync client for standard operations
 r = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
+# Redis channel used to broadcast room-directory changes to every connected client
+ROOMS_CHANNEL = "rooms:channel"
+
 # Rate Limiter settings
 RATE_LIMIT_MAX = 10
 RATE_LIMIT_WINDOW = 60
@@ -193,7 +196,11 @@ def create_room(data: RoomCreate):
     })
     r.sadd("rooms", rid)
     r.sadd(f"room:{rid}:members", data.owner_id)
-    return r.hgetall(f"room:{rid}")
+
+    room = r.hgetall(f"room:{rid}")
+    # Notify every connected client so open sidebars update without a refresh.
+    r.publish(ROOMS_CHANNEL, json.dumps({"type": "room_created", "room": room}))
+    return room
 
 @app.post("/rooms/{room_id}/join")
 def join_room(room_id: str, data: RoomJoin):
@@ -246,13 +253,12 @@ def send_message(room_id: str, data: MessageSend):
     return msg
 
 # Non-blocking Async WebSocket Pub/Sub Bridge
-@app.websocket("/ws/rooms/{room_id}")
-async def websocket_room_endpoint(websocket: WebSocket, room_id: str):
+async def _pubsub_bridge(websocket: WebSocket, channel: str):
     await websocket.accept()
     async_r = aioredis.Redis(host='localhost', port=6379, decode_responses=True)
     pubsub = async_r.pubsub()
-    await pubsub.subscribe(f"chat:channel:{room_id}")
-    
+    await pubsub.subscribe(channel)
+
     async def listen_redis():
         try:
             async for message in pubsub.listen():
@@ -274,8 +280,18 @@ async def websocket_room_endpoint(websocket: WebSocket, room_id: str):
     finally:
         listen_task.cancel()
         try:
-            await pubsub.unsubscribe(f"chat:channel:{room_id}")
+            await pubsub.unsubscribe(channel)
             await pubsub.close()
             await async_r.close()
         except Exception:
             pass
+
+# Global room-directory stream: informs every open client when a room is created.
+@app.websocket("/ws/rooms")
+async def websocket_rooms_endpoint(websocket: WebSocket):
+    await _pubsub_bridge(websocket, ROOMS_CHANNEL)
+
+# Per-room message stream
+@app.websocket("/ws/rooms/{room_id}")
+async def websocket_room_endpoint(websocket: WebSocket, room_id: str):
+    await _pubsub_bridge(websocket, f"chat:channel:{room_id}")

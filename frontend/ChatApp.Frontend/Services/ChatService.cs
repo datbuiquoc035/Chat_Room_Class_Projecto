@@ -121,6 +121,15 @@ public class ChatService
         return null;
     }
 
+    public void CacheRoom(Room room)
+    {
+        if (_cachedRooms != null && !_cachedRooms.Any(r => r.Id == room.Id))
+        {
+            _cachedRooms.Add(room);
+            _cachedRooms.Sort((a, b) => string.CompareOrdinal(a.Id, b.Id));
+        }
+    }
+
     public async Task<Room?> CreateRoomAsync(string name, string ownerId)
     {
         SetUserHeader(ownerId);
@@ -193,31 +202,60 @@ public class ChatService
 
 public class AuthResponse
 {
+    [JsonPropertyName("status")]
     public string Status { get; set; } = "";
+
+    [JsonPropertyName("user_id")]
     public string User_Id { get; set; } = "";
+
+    [JsonPropertyName("username")]
     public string Username { get; set; } = "";
 }
 
 public class Room
 {
+    [JsonPropertyName("id")]
     public string Id { get; set; } = "";
+
+    [JsonPropertyName("name")]
     public string Name { get; set; } = "";
+
+    [JsonPropertyName("owner_id")]
     public string Owner_Id { get; set; } = "";
-    
+
+    [JsonPropertyName("created_at")]
     [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
     public double Created_At { get; set; }
 
+    [JsonPropertyName("member_count")]
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
     public int Member_Count { get; set; } = 0;
 }
 
 public class Message
 {
+    [JsonPropertyName("id")]
     public string Id { get; set; } = "";
+
+    [JsonPropertyName("room_id")]
     public string Room_Id { get; set; } = "";
+
+    [JsonPropertyName("user_id")]
     public string User_Id { get; set; } = "";
+
+    [JsonPropertyName("username")]
     public string Username { get; set; } = "";
+
+    [JsonPropertyName("content")]
     public string Content { get; set; } = "";
-    
+
+    [JsonPropertyName("timestamp")]
     [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
     public double Timestamp { get; set; }
+}
+
+public class RoomEvent
+{
+    public string Type { get; set; } = "";
+    public Room? Room { get; set; }
 }
